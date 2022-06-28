@@ -89,6 +89,7 @@ app.post('/entrada', async (req, res) => {
 
     const entradaSchema = joi.object({
         entry: joi.number().required(),
+        description: joi.string().required()
         //COLOCA O TOKEN PARA IDENTIFICAR CLIENTE
       });
     
@@ -105,7 +106,7 @@ app.post('/entrada', async (req, res) => {
             return res.sendStatus(409);
           }
 
-        await db.collection('entradas').insertOne({ token: dadosEntrada.token, entry: dadosEntrada.entry });
+        await db.collection('entradas').insertOne({ token: dadosEntrada.token, entry: dadosEntrada.entry, description: dadosEntrada.description });
         
         res.status(201).send('Nova entrada registrada!'); 
       } catch(error) {
@@ -122,6 +123,7 @@ app.post('/saida', async (req, res) => {
 
     const saidaSchema = joi.object({
         spent: joi.number().required(),
+        description: joi.string().required()
         //COLOCA O TOKEN PARA IDENTIFICAR CLIENTE
       });
     
@@ -138,7 +140,7 @@ app.post('/saida', async (req, res) => {
             return res.sendStatus(409);
           }
 
-        await db.collection('saidas').insertOne({ token: dadosEntrada.token, spent: dadosSaida.spent });
+        await db.collection('saidas').insertOne({ token: dadosEntrada.token, spent: dadosSaida.spent, description: dadosSaida.description });
         
         res.status(201).send('Nova saída registrada!'); 
       } catch(error) {
