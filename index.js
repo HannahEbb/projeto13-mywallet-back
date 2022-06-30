@@ -3,6 +3,7 @@ import joi from 'joi';
 import cors from 'cors';
 import { MongoClient } from 'mongodb';
 import dotenv from 'dotenv';
+import bcrypt from 'bcrypt';
 
 const app = express();
 
@@ -29,8 +30,9 @@ app.post('/cadastro', async (req, res) => {
 
     const cadastroSchema = joi.object({
         name: joi.string().required(),
-        email: joi.string().required(),
-        password: joi.string().email().required() //USA REGEX?
+        email: joi.string().email().required(),
+        password: joi.string().required(), //USA REGEX?
+        confirm: joi.string().required() // verifica antes de criptografar
         //COLOCA O TOKEN TAMBEM?
       });
     
@@ -40,10 +42,12 @@ app.post('/cadastro', async (req, res) => {
         return res.status(422).send('Preencha os campos corretamente, por favor!');
       }
 
+      const passwordCrypt = bcrypt.hashSync(dadosCadastro.password, 10);
+
       try{
         await db
         .collection('clientes')
-        .insertOne({ name: dadosCadastro.name, email: dadosCadastro.email, password: dadosCadastro.password, confirm: dadosCadastro.confirm });
+        .insertOne({ name: dadosCadastro.name, email: dadosCadastro.email, password: passwordCrypt });
         //insere o TOKEN aqui??
         res.status(201).send('Cliente cadastrado com sucesso!');//ENVIA PARA O FRONT UM OBJETO COM O TOKEN ao inves da mensagem!! 
       } catch(error) {
@@ -63,22 +67,25 @@ app.post('/login', async (req, res) => {
         //COLOCA O TOKEN TAMBEM?
       });
     
-      const { error } = cadastroSchema.validate(dadosLogin);
+      const { error } = loginSchema.validate(dadosLogin);
     
       if (error) {
-        return res.status(422).send('Preencha os campos corretamente, por favor!');
+        return res.status(422).send('Preencha os campos corretamente, por favor!'); //erro do validate joi
+      } 
+
+      const usuario = await db.collection('clientes').findOne({ email: dadosLogin.email });
+
+      if(!usuario) {
+        return res.sendStatus(404); //usuario nao encontrado
       }
 
-      try{
-        await db
-        .collection('clientes')
-        .findOne({ email: dadosLogin.email, password: dadosLogin.password });
-        //vai condição de ter o token aqui? -> token: token??
-        res.status(201).send('Dados corretos'); //o que tem que mandar para o login ser aceito no front?
-      } catch(error) {
-            console.error({ error });
-            res.status(500).send('Problema para fazer login!');
+      const passwordCrypt = bcrypt.compareSync(dadosLogin.password, usuario.password);
+
+      if(!passwordCrypt) {
+        return res.status(401).send('Senha ou e-mail incorretos'); //usuario nao autorizado!
       }
+
+     res.status(201).send('Usuário logado com sucesso!'); // manda info para o front entender que deu certo!
      
 });
 
@@ -89,7 +96,7 @@ app.post('/entrada', async (req, res) => {
 
     const entradaSchema = joi.object({
         entry: joi.number().required(),
-        description: joi.string().required()
+        description: joi.string().required(),
         //COLOCA O TOKEN PARA IDENTIFICAR CLIENTE
       });
     
@@ -106,7 +113,7 @@ app.post('/entrada', async (req, res) => {
             return res.sendStatus(409);
           }
 
-        await db.collection('entradas').insertOne({ token: dadosEntrada.token, entry: dadosEntrada.entry, description: dadosEntrada.description });
+        await db.collection('entradas').insertOne({ token: dadosEntrada.token, entry: dadosEntrada.entry, description: dadosEntrada.description, date: dayjs().format('DD/MM/YYYY') });
         
         res.status(201).send('Nova entrada registrada!'); 
       } catch(error) {
@@ -140,7 +147,7 @@ app.post('/saida', async (req, res) => {
             return res.sendStatus(409);
           }
 
-        await db.collection('saidas').insertOne({ token: dadosEntrada.token, spent: dadosSaida.spent, description: dadosSaida.description });
+        await db.collection('saidas').insertOne({ token: dadosEntrada.token, spent: dadosSaida.spent, description: dadosSaida.description, date: dayjs().format('DD/MM/YYYY') });
         
         res.status(201).send('Nova saída registrada!'); 
       } catch(error) {
@@ -149,3 +156,6 @@ app.post('/saida', async (req, res) => {
       }
      
 })
+
+
+app.listen(process.env.PORT, () => console.log('Servidor rodando!'));
