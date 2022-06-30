@@ -1,9 +1,10 @@
 import express from 'express';
 import joi from 'joi';
 import cors from 'cors';
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
+import { v4 as uuid } from 'uuid';
 
 const app = express();
 
@@ -32,7 +33,7 @@ app.post('/cadastro', async (req, res) => {
         name: joi.string().required(),
         email: joi.string().email().required(),
         password: joi.string().required(), //USA REGEX?
-        confirm: joi.string().required() // verifica antes de criptografar
+        confirm: joi.string().required() // verifica antes de criptografar com joi!!
         //COLOCA O TOKEN TAMBEM?
       });
     
@@ -63,8 +64,7 @@ app.post('/login', async (req, res) => {
 
     const loginSchema = joi.object({
         email: joi.string().required(),
-        password: joi.string().email().required() //USA REGEX?
-        //COLOCA O TOKEN TAMBEM?
+        password: joi.string().email().required() //USAR REGEX
       });
     
       const { error } = loginSchema.validate(dadosLogin);
@@ -74,88 +74,91 @@ app.post('/login', async (req, res) => {
       } 
 
       const usuario = await db.collection('clientes').findOne({ email: dadosLogin.email });
-
-      if(!usuario) {
-        return res.sendStatus(404); //usuario nao encontrado
-      }
-
       const passwordCrypt = bcrypt.compareSync(dadosLogin.password, usuario.password);
 
-      if(!passwordCrypt) {
-        return res.status(401).send('Senha ou e-mail incorretos'); //usuario nao autorizado!
+      if(usuario && passwordCrypt) {
+
+        const token = uuid(); // cria o token 
+
+        await db.collection('sessoes').insertOne({
+          token: token,
+          userId: usuario._id
+        }); // salva o token na colecao de sessoes para poder comparar depois que o usuario fizer reqs.
+
+        return res.status(201).send(token); // manda o TOKEN para o front!
+
+      } else {
+        return res.status(401).send('Senha ou email incorretos!'); //usuario nao encontrado
       }
 
-     res.status(201).send('Usuário logado com sucesso!'); // manda info para o front entender que deu certo!
+
      
 });
 
 
-app.post('/entrada', async (req, res) => {
-    const dadosEntrada = req.body;
-    //o TOKEN vem no body tambem??
+app.post('/transacoes', async (req, res) => {
+  const { authorization } = req.headers; //pega o TOKEN  
 
-    const entradaSchema = joi.object({
+  const token = authorization?.replace('Bearer ', ''); // Tira a parte em texto que vem junto com a req do front
+
+  const sessao = await db.collection('sessoes').findOne({ token }); // Encontra a sessao do usuario com base no token recebido
+
+  if(!sessao) {
+    return res.sendStatus(401);
+  }
+
+  const dadosTransacao = req.body;
+
+    const transacaoSchema = joi.object({
         entry: joi.number().required(),
         description: joi.string().required(),
-        //COLOCA O TOKEN PARA IDENTIFICAR CLIENTE
+        type: joi.string().required() // ADD que so pode entrada ou saida.
       });
     
-      const { error } = entradaSchema.validate(dadosEntrada);
+      const { error } = transacaoSchema.validate(dadosTransacao);
     
       if (error) {
         return res.status(422).send('Preencha os campos corretamente, por favor!');
       }
 
-      try{
-        clienteExiste = await db.collection('clientes').findOne({ token: dadosEntrada.token });
+      try {
 
-        if (clienteExiste) {
-            return res.sendStatus(409);
-          }
-
-        await db.collection('entradas').insertOne({ token: dadosEntrada.token, entry: dadosEntrada.entry, description: dadosEntrada.description, date: dayjs().format('DD/MM/YYYY') });
+        await db.collection('transacoes').insertOne({ entry: dadosTransacao.entry, description: dadosTransacao.description, type: dadosTransacao.type, date: dayjs().format('DD/MM/YYYY'), userId: sessao.userId });
         
-        res.status(201).send('Nova entrada registrada!'); 
+        res.status(201).send('Nova transacao registrada com sucesso!'); 
+
       } catch(error) {
             console.error({ error });
-            res.status(500).send('Problema para resgistrar entrada!');
+            res.status(500).send('Problema para resgistrar transacao!');
       }
      
 });
 
 
-app.post('/saida', async (req, res) => {
-    const dadosSaida = req.body;
-    //o TOKEN vem no body tambem??
+app.get('/transacoes', async (req, res) => {
+  const { authorization } = req.headers; //pega o TOKEN  
 
-    const saidaSchema = joi.object({
-        spent: joi.number().required(),
-        description: joi.string().required()
-        //COLOCA O TOKEN PARA IDENTIFICAR CLIENTE
-      });
-    
-      const { error } = saidaSchema.validate(dadosSaida);
-    
-      if (error) {
-        return res.status(422).send('Preencha os campos corretamente, por favor!');
-      }
+  const token = authorization?.replace('Bearer ', ''); // Tira a parte em texto que vem junto com a req do front
 
-      try{
-        clienteExiste = await db.collection('clientes').findOne({ token: dadosSaida.token });
+  const sessao = await db.collection('sessoes').findOne({ token }); // Encontra a sessao do usuario com base no token recebido
 
-        if (clienteExiste) {
-            return res.sendStatus(409);
-          }
+  if(!sessao) {
+    return res.sendStatus(401);
+  }
 
-        await db.collection('saidas').insertOne({ token: dadosEntrada.token, spent: dadosSaida.spent, description: dadosSaida.description, date: dayjs().format('DD/MM/YYYY') });
+      try {
+
+        const transacoes = await db.collection('transacoes').find({ userId: new ObjectId(sessao.userId)}).toArray();
+
         
-        res.status(201).send('Nova saída registrada!'); 
+        res.status(201).send(transacoes); 
+
       } catch(error) {
             console.error({ error });
-            res.status(500).send('Problema para resgistrar saída!');
+            res.status(500).send('Problema para retornar transacoes!');
       }
      
-})
+});
 
 
 app.listen(process.env.PORT, () => console.log('Servidor rodando!'));
