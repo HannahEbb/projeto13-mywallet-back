@@ -5,6 +5,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
 import { v4 as uuid } from 'uuid';
+import dayjs from 'dayjs';
 
 const app = express();
 
@@ -32,9 +33,8 @@ app.post('/cadastro', async (req, res) => {
     const cadastroSchema = joi.object({
         name: joi.string().required(),
         email: joi.string().email().required(),
-        password: joi.string().required(), //USA REGEX?
-        confirm: joi.string().required() // verifica antes de criptografar com joi!!
-        //COLOCA O TOKEN TAMBEM?
+        password: joi.string().min(4).max(8).required(), //USA REGEX?
+        confirm: joi.string().required().valid(joi.ref('password')) 
       });
     
       const { error } = cadastroSchema.validate(dadosCadastro);
@@ -46,11 +46,12 @@ app.post('/cadastro', async (req, res) => {
       const passwordCrypt = bcrypt.hashSync(dadosCadastro.password, 10);
 
       try{
+
         await db
         .collection('clientes')
         .insertOne({ name: dadosCadastro.name, email: dadosCadastro.email, password: passwordCrypt });
-        //insere o TOKEN aqui??
-        res.status(201).send('Cliente cadastrado com sucesso!');//ENVIA PARA O FRONT UM OBJETO COM O TOKEN ao inves da mensagem!! 
+        res.status(201).send('Cliente cadastrado com sucesso!');
+
       } catch(error) {
             console.error({ error });
             res.status(500).send('Problema para cadastrar cliente!');
@@ -63,14 +64,14 @@ app.post('/login', async (req, res) => {
     const dadosLogin = req.body;
 
     const loginSchema = joi.object({
-        email: joi.string().required(),
-        password: joi.string().email().required() //USAR REGEX
+        email: joi.string().email().required(),
+        password: joi.string().required() 
       });
     
       const { error } = loginSchema.validate(dadosLogin);
     
       if (error) {
-        return res.status(422).send('Preencha os campos corretamente, por favor!'); //erro do validate joi
+        return res.status(422).send('Preencha os campos corretamente, por favor!'); 
       } 
 
       const usuario = await db.collection('clientes').findOne({ email: dadosLogin.email });
@@ -90,8 +91,6 @@ app.post('/login', async (req, res) => {
       } else {
         return res.status(401).send('Senha ou email incorretos!'); //usuario nao encontrado
       }
-
-
      
 });
 
@@ -112,7 +111,7 @@ app.post('/transacoes', async (req, res) => {
     const transacaoSchema = joi.object({
         entry: joi.number().required(),
         description: joi.string().required(),
-        type: joi.string().required() // ADD que so pode entrada ou saida.
+        type: joi.string().allow('entrada', 'saida').required() // ADD que so pode entrada ou saida.
       });
     
       const { error } = transacaoSchema.validate(dadosTransacao);
@@ -149,7 +148,6 @@ app.get('/transacoes', async (req, res) => {
       try {
 
         const transacoes = await db.collection('transacoes').find({ userId: new ObjectId(sessao.userId)}).toArray();
-
         
         res.status(201).send(transacoes); 
 
