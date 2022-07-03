@@ -80,13 +80,14 @@ app.post('/login', async (req, res) => {
       if(usuario && passwordCrypt) {
 
         const token = uuid(); // cria o token 
+        const nome = usuario.name;
 
         await db.collection('sessoes').insertOne({
           token: token,
           userId: usuario._id
         }); // salva o token na colecao de sessoes para poder comparar depois que o usuario fizer reqs.
 
-        return res.status(201).send(token); // manda o TOKEN para o front!
+        return res.status(201).send({ token, nome }); // manda o TOKEN para o front!
 
       } else {
         return res.status(401).send('Senha ou email incorretos!'); //usuario nao encontrado
@@ -122,7 +123,7 @@ app.post('/transacoes', async (req, res) => {
 
       try {
 
-        await db.collection('transacoes').insertOne({ entry: dadosTransacao.entry, description: dadosTransacao.description, type: dadosTransacao.type, date: dayjs().format('DD/MM/YYYY'), userId: sessao.userId });
+        await db.collection('transacoes').insertOne({ entry: dadosTransacao.entry, description: dadosTransacao.description, type: dadosTransacao.type, date: dayjs().format('DD/MM'), userId: sessao.userId });
         
         res.status(201).send('Nova transacao registrada com sucesso!'); 
 
@@ -148,8 +149,22 @@ app.get('/transacoes', async (req, res) => {
       try {
 
         const transacoes = await db.collection('transacoes').find({ userId: new ObjectId(sessao.userId)}).toArray();
+        console.log(transacoes);
+
+        const depositos = await db.collection('transacoes').find({ userId: new ObjectId(sessao.userId), type: "entrada" }).toArray();
+        const gastos = await db.collection('transacoes').find({ userId: new ObjectId(sessao.userId), type: "saida" }).toArray();
         
-        res.status(201).send(transacoes); 
+        function somarTransacoes (array) {
+          let sum = 0; 
+          array.forEach(item => {
+            sum += parseInt(item.entry);
+          });
+          return sum;
+        }
+
+        const saldo = somarTransacoes(depositos) - somarTransacoes(gastos);
+
+        res.status(201).send({transacoes, saldo}); 
 
       } catch(error) {
             console.error({ error });
