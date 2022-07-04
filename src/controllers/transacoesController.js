@@ -4,15 +4,8 @@ import dayjs from 'dayjs';
 
 
 export async function enviarTransacao (req, res) {
-    const { authorization } = req.headers;  
-  
-    const token = authorization?.replace('Bearer ', ''); 
-  
-    const sessao = await db.collection('sessoes').findOne({ token }); 
-  
-    if(!sessao) {
-      return res.sendStatus(401);
-    }
+   
+    const sessao = res.locals.sessao;
   
     const dadosTransacao = req.body;
   
@@ -42,15 +35,8 @@ export async function enviarTransacao (req, res) {
   };
   
 export async function retornarTransacoes (req, res) {
-    const { authorization } = req.headers;  
   
-    const token = authorization?.replace('Bearer ', ''); 
-  
-    const sessao = await db.collection('sessoes').findOne({ token }); 
-  
-    if(!sessao) {
-      return res.sendStatus(401);
-    }
+    const sessao = res.locals.sessao;
   
         try {
   
